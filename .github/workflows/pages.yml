@@ -14,35 +14,51 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - name: Verify website
+      - name: Verify gateway
         shell: bash
         run: |
           python3 - <<'PY_SITE'
           from pathlib import Path
-          from hashlib import sha256
+
           root = Path('site')
           files = {p.relative_to(root).as_posix() for p in root.rglob('*') if p.is_file()}
-          assert files == {'index.html'}, 'Unexpected website files'
+          assert files == {'index.html', '404.html'}, f'Unexpected website files: {sorted(files)}'
           assert not any(p.is_symlink() for p in root.rglob('*'))
-          page = (root / 'index.html').read_bytes()
-          assert sha256(page).hexdigest() == 'fe75e4e580fd4bfd47128e08b01180d9b04828a3b121310d16f78bbc663ac450', 'Homepage bytes differ from approved design'
-          assert b'<title>Bridge Node 7' in page
-          assert b'-----BEGIN PRIVATE KEY-----' not in page
-          print('Website verified')
+
+          needles = (
+              b'lang="en"',
+              b'<title>Bridge Node 7</title>',
+              b'<meta name="robots" content="noindex">',
+              b'<meta http-equiv="refresh" content="0; url=https://bridgenode7.com/">',
+              b'<link rel="canonical" href="https://bridgenode7.com/">',
+              b'href="https://bridgenode7.com/">Continue to bridgenode7.com</a>',
+              b"default-src 'none'",
+              b"style-src 'unsafe-inline'",
+          )
+
+          for name in ('index.html', '404.html'):
+              page = (root / name).read_bytes()
+              assert b'<script' not in page.lower()
+              assert b'-----BEGIN PRIVATE KEY-----' not in page
+              assert b'http://' not in page
+              for needle in needles:
+                  assert needle in page, f'{name} missing {needle!r}'
+          print('Gateway verified')
           PY_SITE
       - name: Upload website
         if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
         with:
           path: site
+
   deploy:
     if: github.event_name != 'pull_request'
-    needs: build
+    needs: validate
     runs-on: ubuntu-latest
     permissions:
       pages: write

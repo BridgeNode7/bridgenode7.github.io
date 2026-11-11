@@ -1,3 +1,3 @@
 # Bridge Node 7
 
-[bridgenode7.com](https://bridgenode7.com)
+Gateway to the official site: [bridgenode7.com](https://bridgenode7.com/).
